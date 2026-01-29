@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Amplify } from 'aws-amplify';
-import { fetchAuthSession, signIn, signUp, signOut, getCurrentUser } from 'aws-amplify/auth';
+import { fetchAuthSession, signIn, signUp, signOut, getCurrentUser, confirmSignUp } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
 import './App.css';
 
@@ -15,6 +15,8 @@ function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [confirmationCode, setConfirmationCode] = useState('');
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [error, setError] = useState('');
   
   // Recipe state
@@ -60,11 +62,28 @@ function App() {
           }
         }
       });
-      alert('Sign up successful! Please check your email to confirm your account, then sign in.');
-      setAuthMode('signin');
-      setEmail('');
+      setNeedsConfirmation(true);
       setPassword('');
       setConfirmPassword('');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleConfirmSignUp = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    try {
+      await confirmSignUp({
+        username: email,
+        confirmationCode: confirmationCode
+      });
+      alert('Email confirmed! You can now sign in.');
+      setNeedsConfirmation(false);
+      setAuthMode('signin');
+      setEmail('');
+      setConfirmationCode('');
     } catch (err) {
       setError(err.message);
     }
@@ -166,6 +185,31 @@ function App() {
                 required
               />
               <button type="submit">Sign In</button>
+            </form>
+          ) : needsConfirmation ? (
+            <form onSubmit={handleConfirmSignUp} className="auth-form">
+              <p style={{ marginBottom: '15px', color: '#555' }}>
+                Check your email for a verification code
+              </p>
+              <input
+                type="text"
+                placeholder="Verification Code"
+                value={confirmationCode}
+                onChange={(e) => setConfirmationCode(e.target.value)}
+                required
+              />
+              <button type="submit">Confirm Email</button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setNeedsConfirmation(false);
+                  setEmail('');
+                  setConfirmationCode('');
+                }}
+                style={{ background: '#6c757d', marginTop: '10px' }}
+              >
+                Back to Sign Up
+              </button>
             </form>
           ) : (
             <form onSubmit={handleSignUp} className="auth-form">
