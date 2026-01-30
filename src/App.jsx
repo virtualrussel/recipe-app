@@ -23,6 +23,7 @@ function App() {
   const [recipes, setRecipes] = useState([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingRecipe, setEditingRecipe] = useState(null);
   const [newRecipe, setNewRecipe] = useState({
     name: '',
     ingredients: '',
@@ -141,6 +142,57 @@ function App() {
     } catch (err) {
       setError('Error creating recipe: ' + err.message);
     }
+  };
+
+  const handleEditRecipe = (recipe) => {
+    setEditingRecipe(recipe);
+    setNewRecipe({
+      name: recipe.name,
+      ingredients: recipe.ingredients,
+      directions: recipe.directions,
+      prepTime: recipe.prepTime || ''
+    });
+    setShowCreateForm(false);
+    setError('');
+  };
+
+  const handleUpdateRecipe = async (e) => {
+    e.preventDefault();
+    
+    try {
+      await client.models.Recipe.update({
+        id: editingRecipe.id,
+        name: newRecipe.name,
+        ingredients: newRecipe.ingredients,
+        directions: newRecipe.directions,
+        prepTime: newRecipe.prepTime
+      });
+      
+      setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: '' });
+      setEditingRecipe(null);
+      loadRecipes();
+    } catch (err) {
+      setError('Error updating recipe: ' + err.message);
+    }
+  };
+
+  const handleDeleteRecipe = async (recipeId, recipeName) => {
+    if (!window.confirm(`Are you sure you want to delete "${recipeName}"?`)) {
+      return;
+    }
+    
+    try {
+      await client.models.Recipe.delete({ id: recipeId });
+      loadRecipes();
+    } catch (err) {
+      setError('Error deleting recipe: ' + err.message);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRecipe(null);
+    setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: '' });
+    setError('');
   };
 
   const filteredRecipes = recipes.filter(recipe =>
@@ -262,16 +314,22 @@ function App() {
             className="search-input"
           />
           <button 
-            onClick={() => setShowCreateForm(!showCreateForm)}
+            onClick={() => {
+              if (editingRecipe) {
+                handleCancelEdit();
+              }
+              setShowCreateForm(!showCreateForm);
+            }}
             className="create-btn"
+            disabled={editingRecipe}
           >
             {showCreateForm ? 'Cancel' : '+ New Recipe'}
           </button>
         </div>
 
-        {showCreateForm && (
-          <form onSubmit={handleCreateRecipe} className="recipe-form">
-            <h2>Create New Recipe</h2>
+        {(showCreateForm || editingRecipe) && (
+          <form onSubmit={editingRecipe ? handleUpdateRecipe : handleCreateRecipe} className="recipe-form">
+            <h2>{editingRecipe ? 'Edit Recipe' : 'Create New Recipe'}</h2>
             {error && <div className="error">{error}</div>}
             
             <input
@@ -280,6 +338,14 @@ function App() {
               value={newRecipe.name}
               onChange={(e) => setNewRecipe({...newRecipe, name: e.target.value})}
               required
+            />
+            
+            <input
+              type="number"
+              placeholder="Prep Time (minutes)"
+              value={newRecipe.prepTime}
+              onChange={(e) => setNewRecipe({...newRecipe, prepTime: parseInt(e.target.value) || ''})}
+              min="0"
             />
             
             <textarea
@@ -297,16 +363,21 @@ function App() {
               rows="8"
               required
             />
-
-            <input
-              type="number"
-              placeholder="Prep Time (minutes)"
-              value={newRecipe.prepTime}
-              onChange={(e) => setNewRecipe({...newRecipe, prepTime: parseInt(e.target.value) || 0})}
-              min="0"
-            />
             
-            <button type="submit">Save Recipe</button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button type="submit" style={{ flex: 1 }}>
+                {editingRecipe ? 'Update Recipe' : 'Save Recipe'}
+              </button>
+              {editingRecipe && (
+                <button 
+                  type="button" 
+                  onClick={handleCancelEdit}
+                  style={{ flex: 1, background: '#6c757d' }}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           </form>
         )}
 
@@ -331,6 +402,38 @@ function App() {
                 <div className="recipe-section">
                   <h4>Directions:</h4>
                   <pre>{recipe.directions}</pre>
+                </div>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                  <button 
+                    onClick={() => handleEditRecipe(recipe)}
+                    style={{ 
+                      flex: 1, 
+                      padding: '10px', 
+                      background: '#667eea', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '6px', 
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteRecipe(recipe.id, recipe.name)}
+                    style={{ 
+                      flex: 1, 
+                      padding: '10px', 
+                      background: '#dc3545', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '6px', 
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                  >
+                    🗑️ Delete
+                  </button>
                 </div>
               </div>
             ))
