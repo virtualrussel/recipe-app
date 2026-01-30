@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Amplify } from 'aws-amplify';
 import { fetchAuthSession, signIn, signUp, signOut, getCurrentUser, confirmSignUp } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
-import * as dtrum from './dynatrace';
 import './App.css';
 
 // Configure Amplify (will be populated by amplify configure)
@@ -40,12 +39,6 @@ function App() {
     try {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
-      
-      // Identify user in Dynatrace
-      if (currentUser?.username) {
-        dtrum.identifyUser(currentUser.username);
-      }
-      
       loadRecipes();
     } catch {
       setUser(null);
@@ -62,23 +55,19 @@ function App() {
     }
 
     try {
-      await dtrum.trackAsyncAction('SignUp', async () => {
-        await signUp({
-          username: email,
-          password: password,
-          options: {
-            userAttributes: {
-              email: email
-            }
+      await signUp({
+        username: email,
+        password: password,
+        options: {
+          userAttributes: {
+            email: email
           }
-        });
+        }
       });
-      
       setNeedsConfirmation(true);
       setPassword('');
       setConfirmPassword('');
     } catch (err) {
-      dtrum.reportError(err);
       setError(err.message);
     }
   };
@@ -88,20 +77,16 @@ function App() {
     setError('');
 
     try {
-      await dtrum.trackAsyncAction('ConfirmSignUp', async () => {
-        await confirmSignUp({
-          username: email,
-          confirmationCode: confirmationCode
-        });
+      await confirmSignUp({
+        username: email,
+        confirmationCode: confirmationCode
       });
-      
       alert('Email confirmed! You can now sign in.');
       setNeedsConfirmation(false);
       setAuthMode('signin');
       setEmail('');
       setConfirmationCode('');
     } catch (err) {
-      dtrum.reportError(err);
       setError(err.message);
     }
   };
@@ -111,47 +96,31 @@ function App() {
     setError('');
 
     try {
-      await dtrum.trackAsyncAction('SignIn', async () => {
-        await signIn({ username: email, password: password });
-      });
-      
+      await signIn({ username: email, password: password });
       await checkUser();
       setEmail('');
       setPassword('');
     } catch (err) {
-      dtrum.reportError(err);
       setError(err.message);
     }
   };
 
   const handleSignOut = async () => {
     try {
-      await dtrum.trackAsyncAction('SignOut', async () => {
-        await signOut();
-      });
-      
+      await signOut();
       setUser(null);
       setRecipes([]);
     } catch (err) {
-      dtrum.reportError(err);
       console.error('Error signing out:', err);
     }
   };
 
   const loadRecipes = async () => {
     try {
-      dtrum.enterAction('LoadRecipes');
-      
       // Using Amplify Data - adjust based on your schema
       const result = await client.models.Recipe.list();
       setRecipes(result.data || []);
-      
-      // Track recipe count as metadata
-      dtrum.addActionProperties('recipeCount', (result.data || []).length);
-      dtrum.leaveAction();
     } catch (err) {
-      dtrum.reportError(err);
-      dtrum.leaveAction();
       console.error('Error loading recipes:', err);
     }
   };
@@ -160,31 +129,17 @@ function App() {
     e.preventDefault();
     
     try {
-      await dtrum.trackAsyncAction('CreateRecipe', async () => {
-        await client.models.Recipe.create({
-          name: newRecipe.name,
-          ingredients: newRecipe.ingredients,
-          directions: newRecipe.directions,
-          prepTime: newRecipe.prepTime
-        });
-      }, {
-        recipeName: newRecipe.name,
-        ingredientCount: newRecipe.ingredients.split('\n').filter(i => i.trim()).length,
-        stepCount: newRecipe.directions.split('\n').filter(d => d.trim()).length,
+      await client.models.Recipe.create({
+        name: newRecipe.name,
+        ingredients: newRecipe.ingredients,
+        directions: newRecipe.directions,
         prepTime: newRecipe.prepTime
-      });
-      
-      // Send business event for recipe creation
-      dtrum.sendBeacon('RecipeCreated', {
-        recipeName: newRecipe.name,
-        timestamp: new Date().toISOString(),
       });
       
       setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: '' });
       setShowCreateForm(false);
       loadRecipes();
     } catch (err) {
-      dtrum.reportError(err);
       setError('Error creating recipe: ' + err.message);
     }
   };
@@ -198,30 +153,25 @@ function App() {
       prepTime: recipe.prepTime || ''
     });
     setShowCreateForm(false);
+    setError('');
   };
 
   const handleUpdateRecipe = async (e) => {
     e.preventDefault();
     
     try {
-      await dtrum.trackAsyncAction('UpdateRecipe', async () => {
-        await client.models.Recipe.update({
-          id: editingRecipe.id,
-          name: newRecipe.name,
-          ingredients: newRecipe.ingredients,
-          directions: newRecipe.directions,
-          prepTime: newRecipe.prepTime
-        });
-      }, {
-        recipeName: newRecipe.name,
-        recipeId: editingRecipe.id
+      await client.models.Recipe.update({
+        id: editingRecipe.id,
+        name: newRecipe.name,
+        ingredients: newRecipe.ingredients,
+        directions: newRecipe.directions,
+        prepTime: newRecipe.prepTime
       });
       
       setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: '' });
       setEditingRecipe(null);
       loadRecipes();
     } catch (err) {
-      dtrum.reportError(err);
       setError('Error updating recipe: ' + err.message);
     }
   };
@@ -232,16 +182,9 @@ function App() {
     }
     
     try {
-      await dtrum.trackAsyncAction('DeleteRecipe', async () => {
-        await client.models.Recipe.delete({ id: recipeId });
-      }, {
-        recipeName: recipeName,
-        recipeId: recipeId
-      });
-      
+      await client.models.Recipe.delete({ id: recipeId });
       loadRecipes();
     } catch (err) {
-      dtrum.reportError(err);
       setError('Error deleting recipe: ' + err.message);
     }
   };
@@ -255,16 +198,6 @@ function App() {
   const filteredRecipes = recipes.filter(recipe =>
     recipe.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  // Track search when term changes
-  useEffect(() => {
-    if (searchTerm) {
-      dtrum.enterAction('SearchRecipes');
-      dtrum.addActionProperties('searchTerm', searchTerm);
-      dtrum.addActionProperties('resultsCount', filteredRecipes.length);
-      dtrum.leaveAction();
-    }
-  }, [searchTerm, filteredRecipes.length]);
 
   if (!user) {
     return (
