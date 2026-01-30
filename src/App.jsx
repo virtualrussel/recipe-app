@@ -26,7 +26,8 @@ function App() {
   const [newRecipe, setNewRecipe] = useState({
     name: '',
     ingredients: '',
-    directions: ''
+    directions: '',
+    prepTime: ''
   });
 
   useEffect(() => {
@@ -130,10 +131,11 @@ function App() {
       await client.models.Recipe.create({
         name: newRecipe.name,
         ingredients: newRecipe.ingredients,
-        directions: newRecipe.directions
+        directions: newRecipe.directions,
+        prepTime: newRecipe.prepTime
       });
       
-      setNewRecipe({ name: '', ingredients: '', directions: '' });
+      setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: '' });
       setShowCreateForm(false);
       loadRecipes();
     } catch (err) {
@@ -295,6 +297,14 @@ function App() {
               rows="8"
               required
             />
+
+            <input
+              type="number"
+              placeholder="Prep Time (minutes)"
+              value={newRecipe.prepTime}
+              onChange={(e) => setNewRecipe({...newRecipe, prepTime: parseInt(e.target.value) || 0})}
+              min="0"
+            />
             
             <button type="submit">Save Recipe</button>
           </form>
@@ -309,6 +319,11 @@ function App() {
             filteredRecipes.map((recipe) => (
               <div key={recipe.id} className="recipe-card">
                 <h3>{recipe.name}</h3>
+                {recipe.prepTime && (
+                  <p style={{ color: '#888', fontSize: '14px', marginBottom: '15px' }}>
+                    ⏱️ Prep time: {recipe.prepTime} minutes
+                  </p>
+                )}
                 <div className="recipe-section">
                   <h4>Ingredients:</h4>
                   <pre>{recipe.ingredients}</pre>
