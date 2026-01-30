@@ -6,6 +6,7 @@ const schema = a.schema({
       name: a.string().required(),
       ingredients: a.string().required(),
       directions: a.string().required(),
+      prepTime: a.integer(),
     })
     .authorization((allow) => [allow.owner()]),
 });
