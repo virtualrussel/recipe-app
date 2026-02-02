@@ -28,7 +28,7 @@ function App() {
     name: '',
     ingredients: '',
     directions: '',
-    prepTime: ''
+    prepTime: null
   });
 
   useEffect(() => {
@@ -136,7 +136,7 @@ function App() {
         prepTime: newRecipe.prepTime
       });
       
-      setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: '' });
+      setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
       setShowCreateForm(false);
       loadRecipes();
     } catch (err) {
@@ -168,7 +168,7 @@ function App() {
         prepTime: newRecipe.prepTime
       });
       
-      setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: '' });
+      setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
       setEditingRecipe(null);
       loadRecipes();
     } catch (err) {
@@ -191,7 +191,7 @@ function App() {
 
   const handleCancelEdit = () => {
     setEditingRecipe(null);
-    setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: '' });
+    setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
     setError('');
   };
 
@@ -343,8 +343,14 @@ function App() {
             <input
               type="number"
               placeholder="Prep Time (minutes)"
-              value={newRecipe.prepTime}
-              onChange={(e) => setNewRecipe({...newRecipe, prepTime: parseInt(e.target.value) || ''})}
+              value={newRecipe.prepTime ?? ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                setNewRecipe({
+                  ...newRecipe, 
+                  prepTime: value === '' ? null : parseInt(value, 10)
+                });
+              }}
               min="0"
             />
             
