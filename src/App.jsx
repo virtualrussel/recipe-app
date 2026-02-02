@@ -150,7 +150,7 @@ function App() {
       name: recipe.name,
       ingredients: recipe.ingredients,
       directions: recipe.directions,
-      prepTime: recipe.prepTime || ''
+      prepTime: recipe.prepTime ?? null
     });
     setShowCreateForm(false);
     setError('');
