@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Amplify } from 'aws-amplify';
 import { fetchAuthSession, signIn, signUp, signOut, getCurrentUser, confirmSignUp } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
+import Toast from './Toast';
+import { useToast } from './useToast';
 import './App.css';
 
 // Configure Amplify (will be populated by amplify configure)
@@ -21,6 +23,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [lastFailedOperation, setLastFailedOperation] = useState(null);
+  const toast = useToast();
   
   // Recipe state
   const [recipes, setRecipes] = useState([]);
@@ -194,7 +197,7 @@ function App() {
         });
       });
       
-      alert('Email confirmed! You can now sign in.');
+      toast.success('Email confirmed! You can now sign in.');
       setNeedsConfirmation(false);
       setAuthMode('signin');
       setEmail('');
@@ -221,6 +224,7 @@ function App() {
       });
       
       await checkUser();
+      toast.success('Welcome back!');
       setEmail('');
       setPassword('');
     } catch (err) {
@@ -297,6 +301,7 @@ function App() {
       setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
       setShowCreateForm(false);
       await loadRecipes(true);
+      toast.success(`Recipe "${recipeData.name}" created successfully!`);
     } catch (err) {
       const friendlyError = getUserFriendlyError(err, 'creating recipe');
       setError(friendlyError);
@@ -308,6 +313,7 @@ function App() {
           setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
           setShowCreateForm(false);
           await loadRecipes(true);
+          toast.success(`Recipe "${recipeData.name}" created successfully!`);
         } catch (retryErr) {
           const retryError = getUserFriendlyError(retryErr, 'creating recipe');
           setError(retryError);
@@ -359,6 +365,7 @@ function App() {
       setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
       setEditingRecipe(null);
       await loadRecipes(true);
+      toast.success(`Recipe "${recipeData.name}" updated successfully!`);
     } catch (err) {
       const friendlyError = getUserFriendlyError(err, 'updating recipe');
       setError(friendlyError);
@@ -370,6 +377,7 @@ function App() {
           setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
           setEditingRecipe(null);
           await loadRecipes(true);
+          toast.success(`Recipe "${recipeData.name}" updated successfully!`);
         } catch (retryErr) {
           const retryError = getUserFriendlyError(retryErr, 'updating recipe');
           setError(retryError);
@@ -397,6 +405,7 @@ function App() {
     try {
       await deleteRecipeAPI(recipeId);
       await loadRecipes(true);
+      toast.success(`Recipe "${recipeName}" deleted successfully!`);
     } catch (err) {
       const friendlyError = getUserFriendlyError(err, 'deleting recipe');
       setError(friendlyError);
@@ -406,6 +415,7 @@ function App() {
         try {
           await deleteRecipeAPI(recipeId);
           await loadRecipes(true);
+          toast.success(`Recipe "${recipeName}" deleted successfully!`);
         } catch (retryErr) {
           const retryError = getUserFriendlyError(retryErr, 'deleting recipe');
           setError(retryError);
@@ -551,6 +561,7 @@ function App() {
             </form>
           )}
         </div>
+        <Toast toasts={toast.toasts} removeToast={toast.removeToast} />
       </div>
     );
   }
@@ -741,6 +752,7 @@ function App() {
           )}
         </div>
       </div>
+      <Toast toasts={toast.toasts} removeToast={toast.removeToast} />
     </div>
   );
 }
