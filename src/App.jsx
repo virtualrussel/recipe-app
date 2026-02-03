@@ -18,6 +18,7 @@ function App() {
   const [confirmationCode, setConfirmationCode] = useState('');
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   
   // Recipe state
   const [recipes, setRecipes] = useState([]);
@@ -48,9 +49,11 @@ function App() {
   const handleSignUp = async (e) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
     
     if (password !== confirmPassword) {
       setError('Passwords do not match');
+      setIsLoading(false);
       return;
     }
 
@@ -69,12 +72,15 @@ function App() {
       setConfirmPassword('');
     } catch (err) {
       setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleConfirmSignUp = async (e) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
     try {
       await confirmSignUp({
@@ -88,12 +94,15 @@ function App() {
       setConfirmationCode('');
     } catch (err) {
       setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleSignIn = async (e) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
     try {
       await signIn({ username: email, password: password });
@@ -102,6 +111,8 @@ function App() {
       setPassword('');
     } catch (err) {
       setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -116,17 +127,20 @@ function App() {
   };
 
   const loadRecipes = async () => {
+    setIsLoading(true);
     try {
-      // Using Amplify Data - adjust based on your schema
       const result = await client.models.Recipe.list();
       setRecipes(result.data || []);
     } catch (err) {
       console.error('Error loading recipes:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleCreateRecipe = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
     
     try {
       await client.models.Recipe.create({
@@ -138,9 +152,10 @@ function App() {
       
       setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
       setShowCreateForm(false);
-      loadRecipes();
+      await loadRecipes();
     } catch (err) {
       setError('Error creating recipe: ' + err.message);
+      setIsLoading(false);
     }
   };
 
@@ -158,6 +173,7 @@ function App() {
 
   const handleUpdateRecipe = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
     
     try {
       await client.models.Recipe.update({
@@ -170,9 +186,10 @@ function App() {
       
       setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
       setEditingRecipe(null);
-      loadRecipes();
+      await loadRecipes();
     } catch (err) {
       setError('Error updating recipe: ' + err.message);
+      setIsLoading(false);
     }
   };
 
@@ -181,11 +198,13 @@ function App() {
       return;
     }
     
+    setIsLoading(true);
     try {
       await client.models.Recipe.delete({ id: recipeId });
-      loadRecipes();
+      await loadRecipes();
     } catch (err) {
       setError('Error deleting recipe: ' + err.message);
+      setIsLoading(false);
     }
   };
 
@@ -238,7 +257,9 @@ function App() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
-              <button type="submit">Sign In</button>
+              <button type="submit" disabled={isLoading}>
+                {isLoading ? 'Signing in...' : 'Sign In'}
+              </button>
             </form>
           ) : needsConfirmation ? (
             <form onSubmit={handleConfirmSignUp} className="auth-form">
@@ -252,7 +273,9 @@ function App() {
                 onChange={(e) => setConfirmationCode(e.target.value)}
                 required
               />
-              <button type="submit">Confirm Email</button>
+              <button type="submit" disabled={isLoading}>
+                {isLoading ? 'Confirming...' : 'Confirm Email'}
+              </button>
               <button 
                 type="button" 
                 onClick={() => {
@@ -260,6 +283,7 @@ function App() {
                   setEmail('');
                   setConfirmationCode('');
                 }}
+                disabled={isLoading}
                 style={{ background: '#6c757d', marginTop: '10px' }}
               >
                 Back to Sign Up
@@ -289,7 +313,9 @@ function App() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
               />
-              <button type="submit">Sign Up</button>
+              <button type="submit" disabled={isLoading}>
+                {isLoading ? 'Signing up...' : 'Sign Up'}
+              </button>
             </form>
           )}
         </div>
@@ -301,7 +327,9 @@ function App() {
     <div className="App">
       <header>
         <h1>🍳 My Recipes</h1>
-        <button onClick={handleSignOut} className="sign-out-btn">Sign Out</button>
+        <button onClick={handleSignOut} className="sign-out-btn" disabled={isLoading}>
+          Sign Out
+        </button>
       </header>
 
       <div className="container">
@@ -321,7 +349,7 @@ function App() {
               setShowCreateForm(!showCreateForm);
             }}
             className="create-btn"
-            disabled={editingRecipe}
+            disabled={editingRecipe || isLoading}
           >
             {showCreateForm ? 'Cancel' : '+ New Recipe'}
           </button>
@@ -371,13 +399,17 @@ function App() {
             />
             
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" style={{ flex: 1 }}>
-                {editingRecipe ? 'Update Recipe' : 'Save Recipe'}
+              <button type="submit" style={{ flex: 1 }} disabled={isLoading}>
+                {isLoading 
+                  ? (editingRecipe ? 'Updating...' : 'Saving...') 
+                  : (editingRecipe ? 'Update Recipe' : 'Save Recipe')
+                }
               </button>
               {editingRecipe && (
                 <button 
                   type="button" 
                   onClick={handleCancelEdit}
+                  disabled={isLoading}
                   style={{ flex: 1, background: '#6c757d' }}
                 >
                   Cancel
@@ -412,6 +444,7 @@ function App() {
                 <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                   <button 
                     onClick={() => handleEditRecipe(recipe)}
+                    disabled={isLoading}
                     style={{ 
                       flex: 1, 
                       padding: '10px', 
@@ -419,14 +452,16 @@ function App() {
                       color: 'white', 
                       border: 'none', 
                       borderRadius: '6px', 
-                      cursor: 'pointer',
-                      fontWeight: '600'
+                      cursor: isLoading ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                      opacity: isLoading ? 0.6 : 1
                     }}
                   >
                     ✏️ Edit
                   </button>
                   <button 
                     onClick={() => handleDeleteRecipe(recipe.id, recipe.name)}
+                    disabled={isLoading}
                     style={{ 
                       flex: 1, 
                       padding: '10px', 
@@ -434,11 +469,12 @@ function App() {
                       color: 'white', 
                       border: 'none', 
                       borderRadius: '6px', 
-                      cursor: 'pointer',
-                      fontWeight: '600'
+                      cursor: isLoading ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                      opacity: isLoading ? 0.6 : 1
                     }}
                   >
-                    🗑️ Delete
+                    {isLoading ? 'Deleting...' : '🗑️ Delete'}
                   </button>
                 </div>
               </div>

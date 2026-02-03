@@ -90,7 +90,7 @@ body {
   transition: background 0.3s;
 }
 
-.auth-form button:hover {
+.auth-form button:hover:not(:disabled) {
   background: #5568d3;
 }
 
@@ -132,7 +132,7 @@ header h1 {
   transition: background 0.3s;
 }
 
-.sign-out-btn:hover {
+.sign-out-btn:hover:not(:disabled) {
   background: #c82333;
 }
 
@@ -174,8 +174,13 @@ header h1 {
   white-space: nowrap;
 }
 
-.create-btn:hover {
+.create-btn:hover:not(:disabled) {
   background: #218838;
+}
+
+.create-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 /* Recipe Form */
@@ -227,7 +232,7 @@ header h1 {
   transition: background 0.3s;
 }
 
-.recipe-form button:hover {
+.recipe-form button:hover:not(:disabled) {
   background: #5568d3;
 }
 
@@ -286,6 +291,16 @@ header h1 {
   color: white;
   font-size: 18px;
   padding: 40px;
+}
+
+/* Global Button Disabled States */
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+button:disabled:hover {
+  transform: none;
 }
 
 @media (max-width: 768px) {
