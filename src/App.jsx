@@ -19,6 +19,8 @@ function App() {
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [lastFailedOperation, setLastFailedOperation] = useState(null);
   
   // Recipe state
   const [recipes, setRecipes] = useState([]);
@@ -36,6 +38,100 @@ function App() {
     checkUser();
   }, []);
 
+  // ============================================
+  // ERROR RECOVERY HELPERS
+  // ============================================
+
+  // Helper to determine if error is retryable (network/timeout errors)
+  const isRetryableError = (error) => {
+    if (!error) return false;
+    
+    const retryableMessages = [
+      'network',
+      'timeout',
+      'fetch',
+      'connection',
+      'ECONNREFUSED',
+      'ETIMEDOUT',
+      'Failed to fetch',
+      'NetworkError'
+    ];
+    
+    const errorMessage = error.message?.toLowerCase() || '';
+    return retryableMessages.some(msg => errorMessage.includes(msg.toLowerCase()));
+  };
+
+  // Helper to get user-friendly error message
+  const getUserFriendlyError = (error, operation) => {
+    if (!error) return 'An unknown error occurred';
+    
+    const errorMsg = error.message || String(error);
+    
+    // Network errors
+    if (isRetryableError(error)) {
+      return `Network error during ${operation}. Retrying automatically...`;
+    }
+    
+    // Auth errors
+    if (errorMsg.includes('NotAuthorizedException')) {
+      return 'Invalid email or password. Please try again.';
+    }
+    if (errorMsg.includes('UserNotFoundException')) {
+      return 'User not found. Please check your email or sign up.';
+    }
+    if (errorMsg.includes('CodeMismatchException')) {
+      return 'Invalid verification code. Please check and try again.';
+    }
+    if (errorMsg.includes('ExpiredCodeException')) {
+      return 'Verification code expired. Please request a new one.';
+    }
+    if (errorMsg.includes('UsernameExistsException')) {
+      return 'An account with this email already exists.';
+    }
+    if (errorMsg.includes('LimitExceededException')) {
+      return 'Too many attempts. Please try again later.';
+    }
+    
+    // Generic fallback
+    return `Error during ${operation}: ${errorMsg}`;
+  };
+
+  // Retry with exponential backoff
+  const retryOperation = async (operation, currentRetry = 0, maxRetries = 3) => {
+    try {
+      return await operation();
+    } catch (error) {
+      if (isRetryableError(error) && currentRetry < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, currentRetry), 5000); // Max 5 seconds
+        console.log(`Retry attempt ${currentRetry + 1}/${maxRetries} after ${delay}ms`);
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return retryOperation(operation, currentRetry + 1, maxRetries);
+      }
+      throw error;
+    }
+  };
+
+  // Clear error
+  const clearError = () => {
+    setError('');
+    setLastFailedOperation(null);
+    setRetryCount(0);
+  };
+
+  // Manual retry handler
+  const handleRetry = () => {
+    if (lastFailedOperation) {
+      setRetryCount(prev => prev + 1);
+      clearError();
+      lastFailedOperation();
+    }
+  };
+
+  // ============================================
+  // AUTHENTICATION
+  // ============================================
+
   const checkUser = async () => {
     try {
       const currentUser = await getCurrentUser();
@@ -48,7 +144,7 @@ function App() {
 
   const handleSignUp = async (e) => {
     e.preventDefault();
-    setError('');
+    clearError();
     setIsLoading(true);
     
     if (password !== confirmPassword) {
@@ -58,20 +154,28 @@ function App() {
     }
 
     try {
-      await signUp({
-        username: email,
-        password: password,
-        options: {
-          userAttributes: {
-            email: email
+      await retryOperation(async () => {
+        return await signUp({
+          username: email,
+          password: password,
+          options: {
+            userAttributes: {
+              email: email
+            }
           }
-        }
+        });
       });
+      
       setNeedsConfirmation(true);
       setPassword('');
       setConfirmPassword('');
     } catch (err) {
-      setError(err.message);
+      const friendlyError = getUserFriendlyError(err, 'sign up');
+      setError(friendlyError);
+      setLastFailedOperation(() => () => {
+        // Re-create the sign up call
+        handleSignUp({ preventDefault: () => {} });
+      });
     } finally {
       setIsLoading(false);
     }
@@ -79,21 +183,28 @@ function App() {
 
   const handleConfirmSignUp = async (e) => {
     e.preventDefault();
-    setError('');
+    clearError();
     setIsLoading(true);
 
     try {
-      await confirmSignUp({
-        username: email,
-        confirmationCode: confirmationCode
+      await retryOperation(async () => {
+        return await confirmSignUp({
+          username: email,
+          confirmationCode: confirmationCode
+        });
       });
+      
       alert('Email confirmed! You can now sign in.');
       setNeedsConfirmation(false);
       setAuthMode('signin');
       setEmail('');
       setConfirmationCode('');
     } catch (err) {
-      setError(err.message);
+      const friendlyError = getUserFriendlyError(err, 'email confirmation');
+      setError(friendlyError);
+      setLastFailedOperation(() => () => {
+        handleConfirmSignUp({ preventDefault: () => {} });
+      });
     } finally {
       setIsLoading(false);
     }
@@ -101,16 +212,23 @@ function App() {
 
   const handleSignIn = async (e) => {
     e.preventDefault();
-    setError('');
+    clearError();
     setIsLoading(true);
 
     try {
-      await signIn({ username: email, password: password });
+      await retryOperation(async () => {
+        return await signIn({ username: email, password: password });
+      });
+      
       await checkUser();
       setEmail('');
       setPassword('');
     } catch (err) {
-      setError(err.message);
+      const friendlyError = getUserFriendlyError(err, 'sign in');
+      setError(friendlyError);
+      setLastFailedOperation(() => () => {
+        handleSignIn({ preventDefault: () => {} });
+      });
     } finally {
       setIsLoading(false);
     }
@@ -126,36 +244,76 @@ function App() {
     }
   };
 
-  const loadRecipes = async () => {
-    setIsLoading(true);
+  // ============================================
+  // RECIPE OPERATIONS
+  // ============================================
+
+  const loadRecipes = async (isRetry = false) => {
+    if (!isRetry) {
+      setIsLoading(true);
+      clearError();
+    }
+    
     try {
-      const result = await client.models.Recipe.list();
+      const result = await retryOperation(async () => {
+        return await client.models.Recipe.list();
+      });
+      
       setRecipes(result.data || []);
+      setRetryCount(0);
+      setLastFailedOperation(null);
     } catch (err) {
       console.error('Error loading recipes:', err);
+      const friendlyError = getUserFriendlyError(err, 'loading recipes');
+      setError(friendlyError);
+      setLastFailedOperation(() => loadRecipes);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // API function for creating recipe (separated from form handler)
+  const createRecipeAPI = async (recipeData) => {
+    return await retryOperation(async () => {
+      return await client.models.Recipe.create(recipeData);
+    });
+  };
+
   const handleCreateRecipe = async (e) => {
     e.preventDefault();
     setIsLoading(true);
+    clearError();
+    
+    const recipeData = {
+      name: newRecipe.name,
+      ingredients: newRecipe.ingredients,
+      directions: newRecipe.directions,
+      prepTime: newRecipe.prepTime
+    };
     
     try {
-      await client.models.Recipe.create({
-        name: newRecipe.name,
-        ingredients: newRecipe.ingredients,
-        directions: newRecipe.directions,
-        prepTime: newRecipe.prepTime
-      });
+      await createRecipeAPI(recipeData);
       
       setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
       setShowCreateForm(false);
-      await loadRecipes();
+      await loadRecipes(true);
     } catch (err) {
-      setError('Error creating recipe: ' + err.message);
+      const friendlyError = getUserFriendlyError(err, 'creating recipe');
+      setError(friendlyError);
       setIsLoading(false);
+      setLastFailedOperation(() => async () => {
+        setIsLoading(true);
+        try {
+          await createRecipeAPI(recipeData);
+          setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
+          setShowCreateForm(false);
+          await loadRecipes(true);
+        } catch (retryErr) {
+          const retryError = getUserFriendlyError(retryErr, 'creating recipe');
+          setError(retryError);
+          setIsLoading(false);
+        }
+      });
     }
   };
 
@@ -168,29 +326,64 @@ function App() {
       prepTime: recipe.prepTime ?? null
     });
     setShowCreateForm(false);
-    setError('');
+    clearError();
+  };
+
+  // API function for updating recipe (separated from form handler)
+  const updateRecipeAPI = async (id, recipeData) => {
+    return await retryOperation(async () => {
+      return await client.models.Recipe.update({
+        id: id,
+        ...recipeData
+      });
+    });
   };
 
   const handleUpdateRecipe = async (e) => {
     e.preventDefault();
     setIsLoading(true);
+    clearError();
+    
+    const recipeData = {
+      name: newRecipe.name,
+      ingredients: newRecipe.ingredients,
+      directions: newRecipe.directions,
+      prepTime: newRecipe.prepTime
+    };
+    
+    const recipeId = editingRecipe.id;
     
     try {
-      await client.models.Recipe.update({
-        id: editingRecipe.id,
-        name: newRecipe.name,
-        ingredients: newRecipe.ingredients,
-        directions: newRecipe.directions,
-        prepTime: newRecipe.prepTime
-      });
+      await updateRecipeAPI(recipeId, recipeData);
       
       setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
       setEditingRecipe(null);
-      await loadRecipes();
+      await loadRecipes(true);
     } catch (err) {
-      setError('Error updating recipe: ' + err.message);
+      const friendlyError = getUserFriendlyError(err, 'updating recipe');
+      setError(friendlyError);
       setIsLoading(false);
+      setLastFailedOperation(() => async () => {
+        setIsLoading(true);
+        try {
+          await updateRecipeAPI(recipeId, recipeData);
+          setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
+          setEditingRecipe(null);
+          await loadRecipes(true);
+        } catch (retryErr) {
+          const retryError = getUserFriendlyError(retryErr, 'updating recipe');
+          setError(retryError);
+          setIsLoading(false);
+        }
+      });
     }
+  };
+
+  // API function for deleting recipe
+  const deleteRecipeAPI = async (recipeId) => {
+    return await retryOperation(async () => {
+      return await client.models.Recipe.delete({ id: recipeId });
+    });
   };
 
   const handleDeleteRecipe = async (recipeId, recipeName) => {
@@ -199,24 +392,42 @@ function App() {
     }
     
     setIsLoading(true);
+    clearError();
+    
     try {
-      await client.models.Recipe.delete({ id: recipeId });
-      await loadRecipes();
+      await deleteRecipeAPI(recipeId);
+      await loadRecipes(true);
     } catch (err) {
-      setError('Error deleting recipe: ' + err.message);
+      const friendlyError = getUserFriendlyError(err, 'deleting recipe');
+      setError(friendlyError);
       setIsLoading(false);
+      setLastFailedOperation(() => async () => {
+        setIsLoading(true);
+        try {
+          await deleteRecipeAPI(recipeId);
+          await loadRecipes(true);
+        } catch (retryErr) {
+          const retryError = getUserFriendlyError(retryErr, 'deleting recipe');
+          setError(retryError);
+          setIsLoading(false);
+        }
+      });
     }
   };
 
   const handleCancelEdit = () => {
     setEditingRecipe(null);
     setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
-    setError('');
+    clearError();
   };
 
   const filteredRecipes = recipes.filter(recipe =>
     recipe.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // ============================================
+  // RENDER - AUTH VIEW
+  // ============================================
 
   if (!user) {
     return (
@@ -239,7 +450,27 @@ function App() {
             </button>
           </div>
 
-          {error && <div className="error">{error}</div>}
+          {error && (
+            <div className="error">
+              <span style={{ flex: 1 }}>{error}</span>
+              <div style={{ display: 'flex', gap: '10px', marginLeft: '10px' }}>
+                {lastFailedOperation && !isLoading && (
+                  <button 
+                    onClick={handleRetry}
+                    className="error-retry-btn"
+                  >
+                    Retry
+                  </button>
+                )}
+                <button 
+                  onClick={clearError}
+                  className="error-dismiss-btn"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
 
           {authMode === 'signin' ? (
             <form onSubmit={handleSignIn} className="auth-form">
@@ -282,6 +513,7 @@ function App() {
                   setNeedsConfirmation(false);
                   setEmail('');
                   setConfirmationCode('');
+                  clearError();
                 }}
                 disabled={isLoading}
                 style={{ background: '#6c757d', marginTop: '10px' }}
@@ -323,6 +555,10 @@ function App() {
     );
   }
 
+  // ============================================
+  // RENDER - MAIN APP
+  // ============================================
+
   return (
     <div className="App">
       <header>
@@ -358,7 +594,30 @@ function App() {
         {(showCreateForm || editingRecipe) && (
           <form onSubmit={editingRecipe ? handleUpdateRecipe : handleCreateRecipe} className="recipe-form">
             <h2>{editingRecipe ? 'Edit Recipe' : 'Create New Recipe'}</h2>
-            {error && <div className="error">{error}</div>}
+            
+            {error && (
+              <div className="error">
+                <span style={{ flex: 1 }}>{error}</span>
+                <div style={{ display: 'flex', gap: '10px', marginLeft: '10px' }}>
+                  {lastFailedOperation && !isLoading && (
+                    <button 
+                      type="button"
+                      onClick={handleRetry}
+                      className="error-retry-btn"
+                    >
+                      Retry
+                    </button>
+                  )}
+                  <button 
+                    type="button"
+                    onClick={clearError}
+                    className="error-dismiss-btn"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
             
             <input
               type="text"
