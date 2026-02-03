@@ -101,6 +101,43 @@ body {
   border-radius: 8px;
   margin-bottom: 15px;
   border: 1px solid #fcc;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.error-retry-btn {
+  padding: 6px 12px;
+  background: #667eea;
+  border: none;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+
+.error-retry-btn:hover {
+  background: #5568d3;
+}
+
+.error-dismiss-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid #c33;
+  color: #c33;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.error-dismiss-btn:hover {
+  background: #c33;
+  color: white;
 }
 
 /* Main App Styles */
@@ -316,5 +353,15 @@ button:disabled:hover {
     flex-direction: column;
     gap: 15px;
     text-align: center;
+  }
+  
+  .error {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .error > div {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
