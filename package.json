@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.600.0",
     "aws-amplify": "^6.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
