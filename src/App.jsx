@@ -4,6 +4,7 @@ import { fetchAuthSession, signIn, signUp, signOut, getCurrentUser, confirmSignU
 import { generateClient } from 'aws-amplify/data';
 import Toast from './Toast';
 import { useToast } from './useToast';
+import logger from './logger';
 import './App.css';
 
 // Configure Amplify (will be populated by amplify configure)
@@ -139,6 +140,11 @@ function App() {
     try {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
+      
+      // Initialize logger after authentication
+      await logger.init();
+      logger.info('User session started', { userId: currentUser.userId });
+      
       loadRecipes();
     } catch {
       setUser(null);
@@ -223,6 +229,8 @@ function App() {
         return await signIn({ username: email, password: password });
       });
       
+      logger.userAction('sign_in', { email });
+      
       await checkUser();
       toast.success('Welcome back!');
       setEmail('');
@@ -240,11 +248,15 @@ function App() {
 
   const handleSignOut = async () => {
     try {
+      logger.info('User signing out');
+      logger.cleanup();
+      
       await signOut();
       setUser(null);
       setRecipes([]);
     } catch (err) {
       console.error('Error signing out:', err);
+      logger.error('Sign out failed', { error: err.message });
     }
   };
 
@@ -296,7 +308,12 @@ function App() {
     };
     
     try {
+      const startTime = Date.now();
       await createRecipeAPI(recipeData);
+      const duration = Date.now() - startTime;
+      
+      logger.userAction('recipe_created', { recipeName: recipeData.name });
+      logger.performance('create_recipe', duration);
       
       setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
       setShowCreateForm(false);
@@ -305,11 +322,23 @@ function App() {
     } catch (err) {
       const friendlyError = getUserFriendlyError(err, 'creating recipe');
       setError(friendlyError);
+      
+      logger.error('Recipe creation failed', {
+        error: err.message,
+        recipeName: recipeData.name
+      });
+      
       setIsLoading(false);
       setLastFailedOperation(() => async () => {
         setIsLoading(true);
         try {
+          const startTime = Date.now();
           await createRecipeAPI(recipeData);
+          const duration = Date.now() - startTime;
+          
+          logger.userAction('recipe_created', { recipeName: recipeData.name });
+          logger.performance('create_recipe', duration);
+          
           setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
           setShowCreateForm(false);
           await loadRecipes(true);
@@ -360,7 +389,12 @@ function App() {
     const recipeId = editingRecipe.id;
     
     try {
+      const startTime = Date.now();
       await updateRecipeAPI(recipeId, recipeData);
+      const duration = Date.now() - startTime;
+      
+      logger.userAction('recipe_updated', { recipeName: recipeData.name, recipeId });
+      logger.performance('update_recipe', duration);
       
       setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
       setEditingRecipe(null);
@@ -369,11 +403,24 @@ function App() {
     } catch (err) {
       const friendlyError = getUserFriendlyError(err, 'updating recipe');
       setError(friendlyError);
+      
+      logger.error('Recipe update failed', {
+        error: err.message,
+        recipeName: recipeData.name,
+        recipeId
+      });
+      
       setIsLoading(false);
       setLastFailedOperation(() => async () => {
         setIsLoading(true);
         try {
+          const startTime = Date.now();
           await updateRecipeAPI(recipeId, recipeData);
+          const duration = Date.now() - startTime;
+          
+          logger.userAction('recipe_updated', { recipeName: recipeData.name, recipeId });
+          logger.performance('update_recipe', duration);
+          
           setNewRecipe({ name: '', ingredients: '', directions: '', prepTime: null });
           setEditingRecipe(null);
           await loadRecipes(true);
@@ -403,17 +450,36 @@ function App() {
     clearError();
     
     try {
+      const startTime = Date.now();
       await deleteRecipeAPI(recipeId);
+      const duration = Date.now() - startTime;
+      
+      logger.userAction('recipe_deleted', { recipeName, recipeId });
+      logger.performance('delete_recipe', duration);
+      
       await loadRecipes(true);
       toast.success(`Recipe "${recipeName}" deleted successfully!`);
     } catch (err) {
       const friendlyError = getUserFriendlyError(err, 'deleting recipe');
       setError(friendlyError);
+      
+      logger.error('Recipe deletion failed', {
+        error: err.message,
+        recipeName,
+        recipeId
+      });
+      
       setIsLoading(false);
       setLastFailedOperation(() => async () => {
         setIsLoading(true);
         try {
+          const startTime = Date.now();
           await deleteRecipeAPI(recipeId);
+          const duration = Date.now() - startTime;
+          
+          logger.userAction('recipe_deleted', { recipeName, recipeId });
+          logger.performance('delete_recipe', duration);
+          
           await loadRecipes(true);
           toast.success(`Recipe "${recipeName}" deleted successfully!`);
         } catch (retryErr) {
